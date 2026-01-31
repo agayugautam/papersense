@@ -60,7 +60,7 @@ Return ONLY valid JSON in this format:
 """
 
 
-def analyze_document(extracted_text: str):
+def analyze_text(extracted_text: str):
     """
     Main AI classification function
     """
