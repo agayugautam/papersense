@@ -1,48 +1,46 @@
-from fastapi import APIRouter, UploadFile, File, Depends
-from sqlalchemy.orm import Session
-from database import SessionLocal
-from models import Document
-from services.blob_service import upload_file
-from services.extraction_service import extract_text
-from services.ai_service import classify_document
+# routes/documents.py
+
+import os
 import json
+from fastapi import APIRouter, UploadFile, File
+from services.extraction_service import extract_text
+from services.ai_service import analyze_text
 
 router = APIRouter()
 
-def get_db():
-    db = SessionLocal()
-    try:
-        yield db
-    finally:
-        db.close()
+UPLOAD_DIR = "uploads"
+os.makedirs(UPLOAD_DIR, exist_ok=True)
+
 
 @router.post("/upload")
-async def upload_document(
-    file: UploadFile = File(...),
-    db: Session = Depends(get_db)
-):
+async def upload_document(file: UploadFile = File(...)):
+    # Read file
     file_bytes = await file.read()
-    size_mb = len(file_bytes) / (1024 * 1024)
 
-    blob_path = upload_file(file_bytes, file.filename)
+    # Save to disk
+    file_path = os.path.join(UPLOAD_DIR, file.filename)
+    with open(file_path, "wb") as f:
+        f.write(file_bytes)
 
+    # Extract text
     extracted_text = extract_text(file_bytes, file.filename)
 
-    ai_result = classify_document(extracted_text)
-    ai_data = json.loads(ai_result)
+    # Call AI
+    ai_result = analyze_text(extracted_text)
 
-    doc = Document(
-        filename=file.filename,
-        document_type=ai_data["document_type"],
-        category=ai_data["category"],
-        summary=ai_data["summary"],
-        detailed_summary=ai_data["detailed_summary"],
-        size_mb=size_mb,
-        blob_path=blob_path
-    )
+    # SAFE JSON PARSING (this is the real fix)
+    try:
+        ai_data = json.loads(ai_result)
+    except Exception:
+        ai_data = {
+            "document_type": "Unknown",
+            "parties": [],
+            "summary": ai_result[:500] if ai_result else ""
+        }
 
-    db.add(doc)
-    db.commit()
-    db.refresh(doc)
-
-    return {"id": doc.id, "status": "uploaded"}
+    return {
+        "status": "success",
+        "filename": file.filename,
+        "size_bytes": len(file_bytes),
+        "ai_data": ai_data
+    }
