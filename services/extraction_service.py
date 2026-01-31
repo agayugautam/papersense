@@ -1,115 +1,81 @@
 # services/extraction_service.py
 
-import os
-import fitz  # PyMuPDF
-import docx
-import pandas as pd
+import io
+import pdfplumber
+from docx import Document
 from PIL import Image
-import pytesseract
+
 from azure.ai.formrecognizer import DocumentAnalysisClient
 from azure.core.credentials import AzureKeyCredential
+
 from config import (
     AZURE_FORM_RECOGNIZER_ENDPOINT,
     AZURE_FORM_RECOGNIZER_KEY
 )
 
-# ----------------------------
-# Main entry point
-# ----------------------------
-def extract_text(file_path: str, filename: str) -> str:
+
+client = DocumentAnalysisClient(
+    endpoint=AZURE_FORM_RECOGNIZER_ENDPOINT,
+    credential=AzureKeyCredential(AZURE_FORM_RECOGNIZER_KEY)
+)
+
+
+def extract_text(file_bytes: bytes, filename: str) -> str:
     ext = filename.lower().split(".")[-1]
 
-    text = ""
-
     try:
+        # -------- PDF --------
         if ext == "pdf":
-            text = extract_text_from_pdf(file_path)
+            text = extract_pdf_text(file_bytes)
+            if len(text.strip()) > 50:
+                return text
 
-            # Fallback to OCR if empty
-            if len(text.strip()) < 50:
-                print("PDF looks scanned. Using Azure OCR...")
-                text = extract_text_with_azure_ocr(file_path)
+            # fallback to Azure OCR for scanned PDF
+            return extract_with_azure(file_bytes)
 
-        elif ext in ["docx"]:
-            text = extract_text_from_docx(file_path)
+        # -------- Word --------
+        if ext == "docx":
+            return extract_docx_text(file_bytes)
 
-        elif ext in ["xlsx", "xls", "csv"]:
-            text = extract_text_from_excel(file_path)
+        # -------- Images --------
+        if ext in ["png", "jpg", "jpeg", "webp", "tiff"]:
+            return extract_with_azure(file_bytes)
 
-        elif ext in ["png", "jpg", "jpeg", "webp"]:
-            text = extract_text_from_image(file_path)
-
-        else:
-            print("Unknown file type, using OCR fallback...")
-            text = extract_text_with_azure_ocr(file_path)
+        # -------- Everything else --------
+        return extract_with_azure(file_bytes)
 
     except Exception as e:
         print("Extraction error:", repr(e))
-        text = ""
-
-    print("EXTRACTED TEXT LENGTH:", len(text))
-    print("SAMPLE TEXT:", text[:300])
-
-    return text.strip()
+        return ""
 
 
-# ----------------------------
-# PDF (digital)
-# ----------------------------
-def extract_text_from_pdf(file_path: str) -> str:
+# ---------------- PDF ----------------
+
+def extract_pdf_text(file_bytes: bytes) -> str:
     text = ""
-    doc = fitz.open(file_path)
-
-    for page in doc:
-        text += page.get_text()
-
+    with pdfplumber.open(io.BytesIO(file_bytes)) as pdf:
+        for page in pdf.pages:
+            page_text = page.extract_text()
+            if page_text:
+                text += page_text + "\n"
     return text
 
 
-# ----------------------------
-# DOCX
-# ----------------------------
-def extract_text_from_docx(file_path: str) -> str:
-    doc = docx.Document(file_path)
+# ---------------- DOCX ----------------
+
+def extract_docx_text(file_bytes: bytes) -> str:
+    doc = Document(io.BytesIO(file_bytes))
     return "\n".join([p.text for p in doc.paragraphs])
 
 
-# ----------------------------
-# Excel / CSV
-# ----------------------------
-def extract_text_from_excel(file_path: str) -> str:
-    if file_path.endswith(".csv"):
-        df = pd.read_csv(file_path)
-    else:
-        df = pd.read_excel(file_path)
+# ---------------- Azure OCR ----------------
 
-    return df.to_string()
-
-
-# ----------------------------
-# Image (local OCR - fallback)
-# ----------------------------
-def extract_text_from_image(file_path: str) -> str:
-    image = Image.open(file_path)
-    return pytesseract.image_to_string(image)
-
-
-# ----------------------------
-# Azure OCR (enterprise grade)
-# ----------------------------
-def extract_text_with_azure_ocr(file_path: str) -> str:
-    if not AZURE_FORM_RECOGNIZER_ENDPOINT or not AZURE_FORM_RECOGNIZER_KEY:
-        print("Azure OCR not configured.")
-        return ""
-
-    client = DocumentAnalysisClient(
-        endpoint=AZURE_FORM_RECOGNIZER_ENDPOINT,
-        credential=AzureKeyCredential(AZURE_FORM_RECOGNIZER_KEY)
+def extract_with_azure(file_bytes: bytes) -> str:
+    poller = client.begin_analyze_document(
+        "prebuilt-read",
+        document=file_bytes
     )
-
-    with open(file_path, "rb") as f:
-        poller = client.begin_analyze_document("prebuilt-read", f)
-        result = poller.result()
+    result = poller.result()
 
     text = ""
     for page in result.pages:
