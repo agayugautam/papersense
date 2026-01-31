@@ -2,36 +2,41 @@ from fastapi import APIRouter, UploadFile, File, Depends
 from sqlalchemy.orm import Session
 from database import get_db
 from models import Document
-from services.blob_service import upload_to_azure
-from services.extraction_service import extract_text_from_pdf
 from services.ai_service import analyze_text
 
-router = APIRouter(prefix="/api/documents", tags=["documents"])
+router = APIRouter()
 
 @router.post("/upload")
-async def upload_document(file: UploadFile = File(...), db: Session = Depends(get_db)):
-    bytes_data = await file.read()
-    blob_url = upload_to_azure(bytes_data, file.filename)
+async def upload_document(
+    file: UploadFile = File(...),
+    db: Session = Depends(get_db)
+):
+    content_bytes = await file.read()
+    text = content_bytes.decode(errors="ignore")
 
-    extracted_text = ""
-    if file.filename.lower().endswith(".pdf"):
-        extracted_text = extract_text_from_pdf(bytes_data)
+    ai = analyze_text(text)
+    doc_type = ai.get("document_type", "Other")
 
-    doc_type = analyze_text(extracted_text)
+    size_mb = len(content_bytes) / (1024 * 1024)
 
     doc = Document(
         filename=file.filename,
-        blob_url=blob_url,
         document_type=doc_type,
-        size_mb=len(bytes_data) / (1024 * 1024)
+        size_mb=size_mb,
+        content=text[:5000]
     )
-
     db.add(doc)
     db.commit()
     db.refresh(doc)
 
-    return {"status": "ok", "document_type": doc_type}
+    return {
+        "id": doc.id,
+        "filename": doc.filename,
+        "document_type": doc.document_type
+    }
+
 
 @router.get("/")
 def list_documents(db: Session = Depends(get_db)):
-    return db.query(Document).order_by(Document.created_at.desc()).all()
+    rows = db.query(Document).all()
+    return rows
