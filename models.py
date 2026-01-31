@@ -1,14 +1,18 @@
-from sqlalchemy import Column, Integer, String, Float, Text
-from database import Base
+from sqlalchemy import create_engine
+from sqlalchemy.orm import sessionmaker, declarative_base
+from config import DATABASE_URL
 
-class Document(Base):
-    __tablename__ = "documents"
+engine = create_engine(
+    DATABASE_URL,
+    connect_args={"check_same_thread": False} if "sqlite" in DATABASE_URL else {}
+)
 
-    id = Column(Integer, primary_key=True, index=True)
-    filename = Column(String, nullable=False)
-    document_type = Column(String, default="Other")
-    parties = Column(String)
-    summary = Column(Text)
-    detailed_summary = Column(Text)
-    size_mb = Column(Float)
-    blob_path = Column(String)
+SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+Base = declarative_base()
+
+def get_db():
+    db = SessionLocal()
+    try:
+        yield db
+    finally:
+        db.close()
