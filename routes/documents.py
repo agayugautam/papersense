@@ -1,7 +1,7 @@
 # src/routes/documents.py
 import os
 import json
-from fastapi import APIRouter, UploadFile, File, HTTPException
+from fastapi import APIRouter, Depends, UploadFile, File, HTTPException
 from services.extraction_service import extract_text
 from services.ai_service import analyze_text
 
