@@ -5,7 +5,7 @@ from routes import documents, dashboard, search
 
 Base.metadata.create_all(bind=engine)
 
-app = FastAPI()
+app = FastAPI(title="PaperSense API")
 
 app.add_middleware(
     CORSMiddleware,
@@ -15,6 +15,10 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-app.include_router(documents.router)
-app.include_router(dashboard.router)
-app.include_router(search.router)
+app.include_router(documents.router, prefix="/api/documents")
+app.include_router(dashboard.router, prefix="/api/dashboard")
+app.include_router(search.router, prefix="/api/search")
+
+@app.get("/")
+def health():
+    return {"status": "PaperSense backend running"}
