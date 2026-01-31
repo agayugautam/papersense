@@ -23,6 +23,9 @@ async def upload_document(file: UploadFile = File(...), db: Session = Depends(ge
     # 2. Extract text FROM REAL FILE
     text = extract_text(data, file.filename)
 
+    print("EXTRACTED TEXT LENGTH:", len(text))
+    print("SAMPLE TEXT:", text[:500])
+
     # 3. AI analysis
     ai = analyze_document(text)
 
