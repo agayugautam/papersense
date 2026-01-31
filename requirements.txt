@@ -12,3 +12,4 @@ azure-storage-blob
 openai
 python-dotenv
 pytesseract
+azure-ai-formrecognizer
