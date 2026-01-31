@@ -9,3 +9,4 @@ pymupdf
 python-docx
 pandas
 python-dotenv
+openpyxl
