@@ -5,6 +5,7 @@ from models import Document
 from services.blob_service import upload_to_azure
 from services.extraction_service import extract_text
 from services.ai_service import analyze_text
+import json
 
 router = APIRouter()
 
@@ -33,7 +34,7 @@ async def upload_document(file: UploadFile = File(...), db: Session = Depends(ge
     doc = Document(
         filename=file.filename,
         document_type=ai.get("document_type", "Other"),
-        parties=ai.get("parties", ""),
+        parties=json.dumps(result["parties"]),
         summary=ai.get("summary", ""),
         detailed_summary=ai.get("detailed_summary", ""),
         size_mb=size_mb,
