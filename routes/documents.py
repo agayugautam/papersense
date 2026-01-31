@@ -121,13 +121,22 @@ async def upload_document(file: UploadFile = File(...)):
     # 6. return structured response
     return {"status": "success", "doc": record}
 
+@router.post("/api/documents/reclassify")
+def reclassify_all(db: Session = Depends(get_db)):
+    docs = db.query(Document).all()
+    for doc in docs:
+        if not doc.document_type or doc.document_type == "Unknown":
+            ai = analyze_text(doc.extracted_text or "")
+            doc.document_type = ai.get("document_type", "Other")
+    db.commit()
+    return {"status": "ok", "count": len(docs)}
 
 # Debug endpoint: list docs (works whether using DB or JSON index)
 @router.get("/list")
 def list_documents():
     if USE_DB:
         db = SessionLocal()
-        rows = db.query(Document).order_by(Document.id.desc()).limit(200).all()
+        rows = db.query(Document).all()
         return {"docs": [
             {
                 "filename": r.filename,
