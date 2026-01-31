@@ -4,7 +4,6 @@ from fastapi import APIRouter, UploadFile, File, Depends
 from sqlalchemy.orm import Session
 from typing import List
 import uuid
-from database import get_db
 
 from database import get_db
 from models import Document
