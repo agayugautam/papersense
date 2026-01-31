@@ -1,4 +1,3 @@
-# database.py
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker, declarative_base
 from config import DATABASE_URL
@@ -11,7 +10,6 @@ engine = create_engine(
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 Base = declarative_base()
 
-# THIS WAS MISSING (this is the bug)
 def get_db():
     db = SessionLocal()
     try:
