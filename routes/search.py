@@ -3,11 +3,11 @@ from sqlalchemy.orm import Session
 from database import get_db
 from models import Document
 
-router = APIRouter()
+router = APIRouter(prefix="/api/search", tags=["search"])
 
 @router.post("/")
-def search(query: dict, db: Session = Depends(get_db)):
-    q = query.get("query", "").lower()
+def search_docs(payload: dict, db: Session = Depends(get_db)):
+    q = payload.get("query", "").lower()
 
     results = db.query(Document).filter(
         Document.filename.ilike(f"%{q}%")
