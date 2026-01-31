@@ -11,3 +11,4 @@ openpyxl
 azure-storage-blob
 openai
 python-dotenv
+pytesseract
