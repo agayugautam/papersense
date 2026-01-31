@@ -15,10 +15,6 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-app.include_router(documents.router, prefix="/api/documents")
-app.include_router(dashboard.router, prefix="/api/dashboard")
-app.include_router(search.router, prefix="/api/search")
-
-@app.get("/")
-def root():
-    return {"status": "PaperSense backend running"}
+app.include_router(documents.router)
+app.include_router(dashboard.router)
+app.include_router(search.router)
