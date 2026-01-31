@@ -6,12 +6,9 @@ class Document(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     filename = Column(String, nullable=False)
-    document_type = Column(String, nullable=False)
-    size_mb = Column(Float)
-
-    parties_involved = Column(Text)     # JSON string
+    document_type = Column(String, default="Other")
+    parties = Column(String)
     summary = Column(Text)
     detailed_summary = Column(Text)
-    keywords = Column(Text)             # JSON string
-
-    content = Column(Text)
+    size_mb = Column(Float)
+    blob_path = Column(String)
