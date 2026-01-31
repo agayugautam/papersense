@@ -1,26 +1,23 @@
-from fastapi import APIRouter, Body, Depends
+from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
+from sqlalchemy import or_, func
 from database import get_db
 from models import Document
 
 router = APIRouter()
 
 @router.post("/")
-def search_docs(
-    query: dict = Body(...),
-    db: Session = Depends(get_db)
-):
-    q = query.get("query", "").lower()
+def ai_search(query: str, db: Session = Depends(get_db)):
+    q = f"%{query.lower()}%"
 
-    rows = db.query(Document).all()
-    results = [
-        {
-            "filename": r.filename,
-            "document_type": r.document_type
-        }
-        for r in rows
-        if q in (r.content or "").lower()
-        or q in r.filename.lower()
-    ]
+    results = db.query(Document).filter(
+        or_(
+            func.lower(Document.summary).like(q),
+            func.lower(Document.detailed_summary).like(q),
+            func.lower(Document.keywords).like(q),
+            func.lower(Document.parties_involved).like(q),
+            func.lower(Document.document_type).like(q),
+        )
+    ).all()
 
-    return {"results": results}
+    return results
