@@ -1,34 +1,40 @@
 # services/ai_service.py
-from openai import AzureOpenAI
-from config import (
-    AZURE_OPENAI_KEY,
-    AZURE_OPENAI_ENDPOINT,
-    AZURE_OPENAI_DEPLOYMENT,
-)
+import json
+from openai import OpenAI
+from config import OPENAI_API_KEY
 
-client = AzureOpenAI(
-    api_key=AZURE_OPENAI_KEY,
-    api_version="2024-02-15-preview",
-    azure_endpoint=AZURE_OPENAI_ENDPOINT,
-)
+client = OpenAI(api_key=OPENAI_API_KEY)
 
-def analyze_text(content: str):
-    system_prompt = """
-You are a document classification engine.
-Given content, return valid JSON with:
-- document_type
-- category
-- summary
-- detailed_summary
+def analyze_text(text: str):
+    try:
+        prompt = f"""
+Classify this document into a business document type.
+Return ONLY valid JSON in this format:
+
+{{
+  "document_type": "Invoice"
+}}
+
+Text:
+{text[:4000]}
 """
 
-    response = client.chat.completions.create(
-        model=AZURE_OPENAI_DEPLOYMENT,
-        messages=[
-            {"role": "system", "content": system_prompt},
-            {"role": "user", "content": content[:3000]},
-        ],
-        temperature=0.2,
-    )
+        response = client.chat.completions.create(
+            model="gpt-4o-mini",
+            messages=[{"role": "user", "content": prompt}],
+            temperature=0
+        )
 
-    return response.choices[0].message.content
+        raw = response.choices[0].message.content.strip()
+
+        # Hard safety
+        data = json.loads(raw)
+
+        if "document_type" not in data:
+            return {"document_type": "Unknown"}
+
+        return data
+
+    except Exception as e:
+        print("AI CLASSIFICATION FAILED:", e)
+        return {"document_type": "Unknown"}
