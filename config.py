@@ -1,12 +1,7 @@
-# config.py
 import os
 from dotenv import load_dotenv
 
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-ENV_PATH = os.path.join(BASE_DIR, ".env")
-
-print("Loading env from:", ENV_PATH)
-load_dotenv(ENV_PATH)
+load_dotenv()
 
 AZURE_STORAGE_CONNECTION_STRING = os.getenv("AZURE_STORAGE_CONNECTION_STRING")
 AZURE_BLOB_CONTAINER = os.getenv("AZURE_BLOB_CONTAINER")
