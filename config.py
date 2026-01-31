@@ -1,15 +1,16 @@
-import os
-from dotenv import load_dotenv
+from fastapi import APIRouter, Depends
+from sqlalchemy.orm import Session
+from database import get_db
+from models import Document
 
-load_dotenv()
+router = APIRouter()
 
-AZURE_STORAGE_CONNECTION_STRING = os.getenv("AZURE_STORAGE_CONNECTION_STRING")
-AZURE_BLOB_CONTAINER = os.getenv("AZURE_BLOB_CONTAINER")
+@router.post("/")
+def search(query: dict, db: Session = Depends(get_db)):
+    q = query.get("query", "").lower()
 
-AZURE_OPENAI_KEY = os.getenv("AZURE_OPENAI_KEY")
-AZURE_OPENAI_ENDPOINT = os.getenv("AZURE_OPENAI_ENDPOINT")
-AZURE_OPENAI_DEPLOYMENT = os.getenv("AZURE_OPENAI_DEPLOYMENT")
+    results = db.query(Document).filter(
+        Document.filename.ilike(f"%{q}%")
+    ).all()
 
-DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///./papersense.db")
-
-print("OPENAI KEY LOADED:", AZURE_OPENAI_KEY is not None)
+    return results
