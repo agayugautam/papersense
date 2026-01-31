@@ -6,40 +6,32 @@ from services.blob_service import upload_to_azure
 from services.extraction_service import extract_text_from_pdf
 from services.ai_service import analyze_text
 
-router = APIRouter()
+router = APIRouter(prefix="/api/documents", tags=["documents"])
 
 @router.post("/upload")
-async def upload_document(
-    file: UploadFile = File(...),
-    db: Session = Depends(get_db)
-):
-    contents = await file.read()
-    url = upload_to_azure(contents, file.filename)
+async def upload_document(file: UploadFile = File(...), db: Session = Depends(get_db)):
+    bytes_data = await file.read()
+    blob_url = upload_to_azure(bytes_data, file.filename)
 
-    text = ""
+    extracted_text = ""
     if file.filename.lower().endswith(".pdf"):
-        text = extract_text_from_pdf(contents)
+        extracted_text = extract_text_from_pdf(bytes_data)
 
-    ai = analyze_text(text)
-    doc_type = ai.get("document_type", "Other")
-
-    size_mb = len(contents) / (1024 * 1024)
+    doc_type = analyze_text(extracted_text)
 
     doc = Document(
         filename=file.filename,
-        url=url,
+        blob_url=blob_url,
         document_type=doc_type,
-        size_mb=size_mb
+        size_mb=len(bytes_data) / (1024 * 1024)
     )
 
     db.add(doc)
     db.commit()
     db.refresh(doc)
 
-    return doc
-
+    return {"status": "ok", "document_type": doc_type}
 
 @router.get("/")
 def list_documents(db: Session = Depends(get_db)):
-    rows = db.query(Document).order_by(Document.id.desc()).all()
-    return rows
+    return db.query(Document).order_by(Document.created_at.desc()).all()
