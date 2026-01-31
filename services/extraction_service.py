@@ -1,8 +1,8 @@
 import fitz  # pymupdf
 
-def extract_text_from_pdf(file_bytes: bytes) -> str:
-    doc = fitz.open(stream=file_bytes, filetype="pdf")
+def extract_text_from_pdf(file_bytes):
     text = ""
-    for page in doc:
-        text += page.get_text()
-    return text[:8000]
+    with fitz.open(stream=file_bytes, filetype="pdf") as doc:
+        for page in doc:
+            text += page.get_text()
+    return text
