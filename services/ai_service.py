@@ -12,7 +12,7 @@ client = AzureOpenAI(
     azure_endpoint=AZURE_OPENAI_ENDPOINT,
 )
 
-def classify_document(content: str):
+def analyze_text(content: str):
     system_prompt = """
 You are a document classification engine.
 Given content, return valid JSON with:
