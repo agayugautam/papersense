@@ -1,117 +1,50 @@
 import json
-from openai import AzureOpenAI
+import requests
 from config import (
     AZURE_OPENAI_KEY,
     AZURE_OPENAI_ENDPOINT,
     AZURE_OPENAI_DEPLOYMENT
 )
 
-ALLOWED_CATEGORIES = [
-    "Product Display",
-    "Product Display Image",
-    "Product Packaging",
-    "Promotional Brochure",
-    "Promotional Display",
-    "Promotional Offer",
-    "Purchase Order",
-    "Purchase Return Voucher",
-    "Receipt Confirmation Report",
-    "Resume",
-    "Retail Mart Promotional Flyer",
-    "Retail Promotion Display",
-    "Salary Slip",
-    "Sales and Commission Report",
-    "Service Agreement (Renewal)",
-    "Shipment Inspection Report",
-    "Sofa Re-upholstery Price List",
-    "Task Checklist",
-    "Transaction Details Report",
-    "Transaction Report",
-    "Vendor Delivery Schedule",
-    "WOQODe Customer Vehicle Details",
-    "Addition of New Vehicles Request",
-    "Agreement for the Opening Credit Account",
-    "Authorization Letter",
-    "Automated Stock Report",
-    "Bean Bag Specifications",
-    "Business Development Agreement",
-    "Business Development and Supply Agreement",
-    "Certificate of Analysis",
-    "Certificate of Origin",
-    "Credit Facility Request Letter",
-    "Customer Log",
-    "Customs Declaration",
-    "Delivery Note",
-    "Food Shipment Inspection Report",
-    "Form of Supply Agreement",
-    "GWC Outbound Order Form",
-    "Image Metadata",
-    "Indemnity Letter",
-    "Inventory Report",
-    "Invoice",
-    "Kids Catalogue",
-    "License Agreement",
-    "Local Purchase Order",
-    "Local Supply Agreement",
-    "Merchant Transaction Log",
-    "Ministry of Justice Lawyer Identification Card",
-    "Notification",
-    "Order Allocation Report",
-    "Payment Advice",
-    "Payment Confirmation",
-    "Payment Reminder",
-    "Other"
-]
-
-client = AzureOpenAI(
-    api_key=AZURE_OPENAI_KEY,
-    api_version="2024-02-15-preview",
-    azure_endpoint=AZURE_OPENAI_ENDPOINT
-)
-
 def analyze_text(text: str):
-    if not text or not text.strip():
+    if not text.strip():
         return {"document_type": "Other"}
 
-    try:
-        categories_str = "\n".join(ALLOWED_CATEGORIES)
+    url = f"{AZURE_OPENAI_ENDPOINT}/openai/deployments/{AZURE_OPENAI_DEPLOYMENT}/chat/completions?api-version=2024-02-15-preview"
 
-        prompt = f"""
-You are an enterprise document classification system.
+    headers = {
+        "Content-Type": "application/json",
+        "api-key": AZURE_OPENAI_KEY
+    }
 
-You must classify the document into EXACTLY ONE of the following categories:
+    prompt = f"""
+Classify this document into ONE of these categories or "Other":
 
-{categories_str}
+Invoice, Purchase Order, Receipt, Resume, Agreement, Report, Certificate,
+Authorization Letter, Delivery Note, Salary Slip, Promotional Brochure,
+Inventory Report, Payment Advice
 
-Rules:
-- You must return valid JSON only.
-- You must return exactly one category from the list.
-- If nothing matches clearly, return "Other".
+Return ONLY valid JSON:
+{{ "document_type": "..." }}
 
-Return format:
-{{ "document_type": "<one category>" }}
-
-Document text:
+Document:
 {text[:4000]}
 """
 
-        response = client.chat.completions.create(
-            model=AZURE_OPENAI_DEPLOYMENT,
-            messages=[{"role": "user", "content": prompt}],
-            temperature=0,
-            response_format={ "type": "json_object" }
-        )
+    payload = {
+        "messages": [
+            {"role": "user", "content": prompt}
+        ],
+        "temperature": 0,
+        "max_tokens": 100
+    }
 
-        raw = response.choices[0].message.content
-        data = json.loads(raw)
-
-        doc_type = data.get("document_type", "Other")
-
-        if doc_type not in ALLOWED_CATEGORIES:
-            return {"document_type": "Other"}
-
-        return {"document_type": doc_type}
-
+    try:
+        r = requests.post(url, headers=headers, json=payload, timeout=30)
+        r.raise_for_status()
+        raw = r.json()["choices"][0]["message"]["content"]
+        parsed = json.loads(raw)
+        return parsed
     except Exception as e:
-        print("AI CLASSIFICATION FAILED:", repr(e))
+        print("AI failed:", e)
         return {"document_type": "Other"}
