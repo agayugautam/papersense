@@ -4,7 +4,7 @@ from database import get_db
 from models import Document
 from services.blob_service import upload_to_azure
 from services.extraction_service import extract_text
-from services.ai_service import analyze_document
+from services.ai_service import analyze_text
 
 router = APIRouter()
 
@@ -27,7 +27,7 @@ async def upload_document(file: UploadFile = File(...), db: Session = Depends(ge
     print("SAMPLE TEXT:", text[:500])
 
     # 3. AI analysis
-    ai = analyze_document(text)
+    ai = analyze_text(text)
 
     # 4. Insert into DB ONLY AFTER Azure success
     doc = Document(
