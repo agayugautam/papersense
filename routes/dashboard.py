@@ -3,32 +3,26 @@ from sqlalchemy.orm import Session
 from database import get_db
 from models import Document
 
-router = APIRouter(prefix="/api/dashboard", tags=["dashboard"])
+router = APIRouter()
 
 @router.get("/metrics")
 def dashboard_metrics(db: Session = Depends(get_db)):
-    docs = db.query(Document).all()
-    total = len(docs)
-    size_mb = sum(d.size_mb for d in docs)
+    rows = db.query(Document).all()
 
-    recent = docs[-5:]
+    total = len(rows)
+    storage = sum([r.size_mb for r in rows])
 
-    folders = {}
-    for d in docs:
-        folders.setdefault(d.document_type or "Other", []).append(d)
+    recent = rows[-10:]
 
     return {
         "total_documents": total,
-        "storage_used_mb": round(size_mb, 2),
+        "storage_used_mb": round(storage, 2),
         "recent_files": [
-            {"filename": d.filename, "size_mb": d.size_mb}
-            for d in recent
-        ],
-        "folders": {
-            k: [
-                {"filename": f.filename, "size_mb": f.size_mb}
-                for f in v
-            ]
-            for k, v in folders.items()
-        }
+            {
+                "filename": r.filename,
+                "document_type": r.document_type,
+                "size_mb": r.size_mb
+            }
+            for r in recent
+        ]
     }
