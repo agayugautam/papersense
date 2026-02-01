@@ -18,7 +18,13 @@ def normalize_query(q: str):
     q = q.lower()
     tokens = re.findall(r"\w+", q)
     tokens = [t for t in tokens if t not in STOP_WORDS]
-    return " ".join(tokens)
+    # naive singularization
+    normalized = []
+    for t in tokens:
+        if t.endswith("s") and len(t) > 3:
+            t = t[:-1]
+        normalized.append(t)
+    return " ".join(normalized)
 
 @router.post("/")
 def search(payload: SearchRequest, db: Session = Depends(get_db)):
