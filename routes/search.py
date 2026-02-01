@@ -27,6 +27,7 @@ def extract_keywords(text: str):
 
 @router.post("/")
 def search(q: dict, db: Session = Depends(get_db)):
+    print("SEARCH HIT:", q)
     raw = q.get("query", "")
     keywords = extract_keywords(raw)
 
