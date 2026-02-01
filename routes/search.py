@@ -46,4 +46,4 @@ def search(q: dict, db: Session = Depends(get_db)):
         *filters
     ).all()
 
-    return results
+    return {"results": results}
