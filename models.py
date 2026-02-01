@@ -1,5 +1,6 @@
-from sqlalchemy import Column, Integer, String, Float, Text
+from sqlalchemy import Column, Integer, String, Float, Text, DateTime
 from database import Base
+from datetime import datetime
 
 class Document(Base):
     __tablename__ = "documents"
@@ -12,3 +13,6 @@ class Document(Base):
     detailed_summary = Column(Text)
     size_mb = Column(Float)
     blob_path = Column(String)
+
+    # 🔥 CRITICAL FIELD
+    created_at = Column(DateTime, default=datetime.utcnow)
