@@ -1,7 +1,9 @@
-from fastapi import FastAPI, Body
+from fastapi import FastAPI, Body, Depends
 from fastapi.middleware.cors import CORSMiddleware
-from database import Base, engine
+from database import Base, engine, get_db
 from routes import documents, dashboard, search
+from sqlalchemy.orm import Session
+from models import Document
 
 Base.metadata.create_all(bind=engine)
 
