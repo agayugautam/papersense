@@ -2,49 +2,45 @@ from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 from database import get_db
 from models import Document
+from pydantic import BaseModel
 import re
 
 router = APIRouter()
 
+class SearchRequest(BaseModel):
+    query: str
+
 STOP_WORDS = {
-    "show", "me", "documents", "document",
-    "related", "to", "find", "get", "please",
-    "give", "list", "all"
+    "show", "me", "give", "find", "list", "get",
+    "all", "please", "documents", "document"
 }
 
-def extract_keywords(text: str):
-    words = re.findall(r"\w+", text.lower())
-    keywords = [w for w in words if w not in STOP_WORDS]
+def normalize_query(q: str):
+    q = q.lower()
+    tokens = re.findall(r"\w+", q)
+    tokens = [t for t in tokens if t not in STOP_WORDS]
 
-    # naive singularization (resumes -> resume)
     normalized = []
-    for w in keywords:
-        if w.endswith("s") and len(w) > 3:
-            w = w[:-1]
-        normalized.append(w)
+    for t in tokens:
+        if t.endswith("s") and len(t) > 3:
+            t = t[:-1]
+        normalized.append(t)
 
-    return normalized   # <-- return LIST, not string
+    return " ".join(normalized)
 
 @router.post("/")
-def search(q: dict, db: Session = Depends(get_db)):
-    print("SEARCH HIT:", q)
-    raw = q.get("query", "")
-    keywords = extract_keywords(raw)
+def search(req: SearchRequest, db: Session = Depends(get_db)):
+    raw = req.query
+    term = normalize_query(raw)
 
-    if not keywords:
-        return []
-
-    # Build OR filters dynamically
-    filters = []
-    for kw in keywords:
-        like = f"%{kw}%"
-        filters.append(Document.summary.ilike(like))
-        filters.append(Document.detailed_summary.ilike(like))
-        filters.append(Document.parties.ilike(like))
-        filters.append(Document.filename.ilike(like))
+    print("RAW QUERY:", raw)
+    print("NORMALIZED:", term)
 
     results = db.query(Document).filter(
-        *filters
+        Document.summary.ilike(f"%{term}%") |
+        Document.detailed_summary.ilike(f"%{term}%") |
+        Document.parties.ilike(f"%{term}%") |
+        Document.filename.ilike(f"%{term}%")
     ).all()
 
     return {"results": results}
