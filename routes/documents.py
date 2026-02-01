@@ -26,6 +26,11 @@ def normalize_blob_path(path: str):
 
     return path
 
+@router.get("/")
+def get_all_documents(db: Session = Depends(get_db)):
+    docs = db.query(Document).order_by(Document.id.desc()).all()
+    return docs
+
 @router.post("/upload")
 async def upload_document(
     file: UploadFile = File(...),
