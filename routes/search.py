@@ -2,45 +2,54 @@ from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 from database import get_db
 from models import Document
-from pydantic import BaseModel
 import re
 
 router = APIRouter()
 
-class SearchRequest(BaseModel):
-    query: str
+DOC_TYPES = ["resume", "invoice", "receipt", "contract", "report"]
 
 STOP_WORDS = {
     "show", "me", "give", "find", "list", "get",
-    "all", "please", "documents", "document"
+    "all", "please", "documents", "document", "of", "with"
 }
 
-def normalize_query(q: str):
-    q = q.lower()
+def extract_intent(query: str):
+    q = query.lower()
+
+    main_type = None
+    for t in DOC_TYPES:
+        if t in q:
+            main_type = t
+            q = q.replace(t, "")
+            break
+
     tokens = re.findall(r"\w+", q)
-    tokens = [t for t in tokens if t not in STOP_WORDS]
+    filters = [t for t in tokens if t not in STOP_WORDS]
 
-    normalized = []
-    for t in tokens:
-        if t.endswith("s") and len(t) > 3:
-            t = t[:-1]
-        normalized.append(t)
-
-    return " ".join(normalized)
+    return main_type, " ".join(filters)
 
 @router.post("/")
-def search(req: SearchRequest, db: Session = Depends(get_db)):
-    raw = req.query
-    term = normalize_query(raw)
+def search(q: dict, db: Session = Depends(get_db)):
+    raw = q.get("query", "")
+    main_type, filters = extract_intent(raw)
 
-    print("RAW QUERY:", raw)
-    print("NORMALIZED:", term)
+    print("RAW:", raw)
+    print("TYPE:", main_type)
+    print("FILTERS:", filters)
 
-    results = db.query(Document).filter(
-        Document.summary.ilike(f"%{term}%") |
-        Document.detailed_summary.ilike(f"%{term}%") |
-        Document.parties.ilike(f"%{term}%") |
-        Document.filename.ilike(f"%{term}%")
-    ).all()
+    query = db.query(Document)
 
+    # Step 1: filter by document type
+    if main_type:
+        query = query.filter(
+            Document.document_type.ilike(f"%{main_type}%")
+        )
+
+    # Step 2: apply detailed filter
+    if filters:
+        query = query.filter(
+            Document.detailed_summary.ilike(f"%{filters}%")
+        )
+
+    results = query.all()
     return {"results": results}
