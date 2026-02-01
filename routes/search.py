@@ -4,6 +4,7 @@ from database import get_db
 from models import Document
 from pydantic import BaseModel
 import re
+from services.ai_service import extract_search_intent
 
 router = APIRouter()
 
@@ -27,14 +28,32 @@ def normalize_query(q: str):
     return " ".join(normalized)
 
 @router.post("/")
-def search(payload: SearchRequest, db: Session = Depends(get_db)):
-    term = normalize_query(payload.query)
+def search(q: dict, db: Session = Depends(get_db)):
+    query = q.get("query", "")
 
-    results = db.query(Document).filter(
-        Document.summary.ilike(f"%{term}%") |
-        Document.detailed_summary.ilike(f"%{term}%") |
-        Document.parties.ilike(f"%{term}%") |
-        Document.document_type.ilike(f"%{term}%")
-    ).all()
+    intent = extract_search_intent(query)
 
+    doc_type = intent.get("document_type")
+    min_exp = intent.get("min_experience_years")
+    keywords = intent.get("keywords", [])
+
+    qset = db.query(Document)
+
+    # 1. Filter by document type
+    if doc_type:
+        qset = qset.filter(Document.document_type.ilike(f"%{doc_type}%"))
+
+    # 2. Keyword semantic filter
+    for kw in keywords:
+        qset = qset.filter(
+            Document.detailed_summary.ilike(f"%{kw}%")
+        )
+
+    # 3. Experience heuristic
+    if min_exp:
+        qset = qset.filter(
+            Document.detailed_summary.ilike("%year%")
+        )
+
+    results = qset.all()
     return results
