@@ -42,7 +42,8 @@ def serialize_document(doc: Document):
     }
 
 
-@router.post("/")
+# CRITICAL: no trailing slash
+@router.post("")
 def search(q: dict, db: Session = Depends(get_db)):
     raw = q.get("query", "")
     main_type, filters = extract_intent(raw)
@@ -53,21 +54,17 @@ def search(q: dict, db: Session = Depends(get_db)):
 
     query = db.query(Document)
 
-    # Step 1: filter by document type
     if main_type:
         query = query.filter(
             Document.document_type.ilike(f"%{main_type}%")
         )
 
-    # Step 2: apply detailed filters (token-wise)
     for token in filters:
         query = query.filter(
             Document.detailed_summary.ilike(f"%{token}%")
         )
 
     results = query.all()
-
-    # CRITICAL FIX: serialize ORM objects
     serialized = [serialize_document(d) for d in results]
 
     return {"results": serialized}
