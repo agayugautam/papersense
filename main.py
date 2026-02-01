@@ -25,14 +25,8 @@ app.include_router(search.router, prefix="/api/search")
 def health():
     return {"status": "PaperSense backend running"}
 
-@app.get("/api/debug/documents")
-def debug_documents(db: Session = Depends(get_db)):
-    docs = db.query(Document).all()
-    return [
-        {
-            "id": d.id,
-            "filename": d.filename,
-            "blob_path": d.blob_path
-        }
-        for d in docs
-    ]
+@app.post("/api/debug/reset-documents")
+def reset_documents(db: Session = Depends(get_db)):
+    db.query(Document).delete()
+    db.commit()
+    return {"status": "all documents deleted"}
