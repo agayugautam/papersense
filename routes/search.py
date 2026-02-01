@@ -26,7 +26,21 @@ def extract_intent(query: str):
     tokens = re.findall(r"\w+", q)
     filters = [t for t in tokens if t not in STOP_WORDS]
 
-    return main_type, " ".join(filters)
+    return main_type, filters
+
+
+def serialize_document(doc: Document):
+    return {
+        "id": doc.id,
+        "filename": doc.filename,
+        "document_type": doc.document_type,
+        "parties": doc.parties,
+        "summary": doc.summary,
+        "detailed_summary": doc.detailed_summary,
+        "size_mb": doc.size_mb,
+        "blob_path": doc.blob_path
+    }
+
 
 @router.post("/")
 def search(q: dict, db: Session = Depends(get_db)):
@@ -35,7 +49,7 @@ def search(q: dict, db: Session = Depends(get_db)):
 
     print("RAW:", raw)
     print("TYPE:", main_type)
-    print("FILTERS:", filters)
+    print("FILTER TOKENS:", filters)
 
     query = db.query(Document)
 
@@ -45,11 +59,15 @@ def search(q: dict, db: Session = Depends(get_db)):
             Document.document_type.ilike(f"%{main_type}%")
         )
 
-    # Step 2: apply detailed filter
-    if filters:
+    # Step 2: apply detailed filters (token-wise)
+    for token in filters:
         query = query.filter(
-            Document.detailed_summary.ilike(f"%{filters}%")
+            Document.detailed_summary.ilike(f"%{token}%")
         )
 
     results = query.all()
-    return {"results": results}
+
+    # CRITICAL FIX: serialize ORM objects
+    serialized = [serialize_document(d) for d in results]
+
+    return {"results": serialized}
