@@ -2,58 +2,48 @@ from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 from database import get_db
 from models import Document
-from pydantic import BaseModel
 import re
-from services.ai_service import extract_search_intent
 
 router = APIRouter()
 
-class SearchRequest(BaseModel):
-    query: str
+STOP_WORDS = {
+    "show", "me", "documents", "document",
+    "related", "to", "find", "get", "please",
+    "give", "list", "all"
+}
 
-STOP_WORDS = [
-    "show", "me", "give", "find", "list", "get", "all", "please"
-]
+def extract_keywords(text: str):
+    words = re.findall(r"\w+", text.lower())
+    keywords = [w for w in words if w not in STOP_WORDS]
 
-def normalize_query(q: str):
-    q = q.lower()
-    tokens = re.findall(r"\w+", q)
-    tokens = [t for t in tokens if t not in STOP_WORDS]
-    # naive singularization
+    # naive singularization (resumes -> resume)
     normalized = []
-    for t in tokens:
-        if t.endswith("s") and len(t) > 3:
-            t = t[:-1]
-        normalized.append(t)
-    return " ".join(normalized)
+    for w in keywords:
+        if w.endswith("s") and len(w) > 3:
+            w = w[:-1]
+        normalized.append(w)
+
+    return normalized   # <-- return LIST, not string
 
 @router.post("/")
 def search(q: dict, db: Session = Depends(get_db)):
-    query = q.get("query", "")
+    raw = q.get("query", "")
+    keywords = extract_keywords(raw)
 
-    intent = extract_search_intent(query)
+    if not keywords:
+        return []
 
-    doc_type = intent.get("document_type")
-    min_exp = intent.get("min_experience_years")
-    keywords = intent.get("keywords", [])
-
-    qset = db.query(Document)
-
-    # 1. Filter by document type
-    if doc_type:
-        qset = qset.filter(Document.document_type.ilike(f"%{doc_type}%"))
-
-    # 2. Keyword semantic filter
+    # Build OR filters dynamically
+    filters = []
     for kw in keywords:
-        qset = qset.filter(
-            Document.detailed_summary.ilike(f"%{kw}%")
-        )
+        like = f"%{kw}%"
+        filters.append(Document.summary.ilike(like))
+        filters.append(Document.detailed_summary.ilike(like))
+        filters.append(Document.parties.ilike(like))
+        filters.append(Document.filename.ilike(like))
 
-    # 3. Experience heuristic
-    if min_exp:
-        qset = qset.filter(
-            Document.detailed_summary.ilike("%year%")
-        )
+    results = db.query(Document).filter(
+        *filters
+    ).all()
 
-    results = qset.all()
     return results
