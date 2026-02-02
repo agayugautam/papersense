@@ -1,22 +1,23 @@
 from azure.storage.blob import BlobServiceClient
-from config import AZURE_STORAGE_CONNECTION_STRING, AZURE_BLOB_CONTAINER
+import os
+from config import AZURE_BLOB_CONNECTION_STRING, AZURE_BLOB_CONTAINER
 
-def upload_to_azure(filename: str, data: bytes) -> str:
-    print("AZURE UPLOAD:", filename)
+blob_service_client = BlobServiceClient.from_connection_string(
+    AZURE_BLOB_CONNECTION_STRING
+)
+container_client = blob_service_client.get_container_client(
+    AZURE_BLOB_CONTAINER
+)
 
-    blob_service = BlobServiceClient.from_connection_string(
-        AZURE_STORAGE_CONNECTION_STRING
-    )
-    container = blob_service.get_container_client(AZURE_BLOB_CONTAINER)
 
-    try:
-        container.create_container()
-    except:
-        pass
+def upload_to_blob(file_path, filename):
+    blob_name = f"{os.path.basename(file_path)}"
+    blob_client = container_client.get_blob_client(blob_name)
 
-    blob = container.get_blob_client(filename)
-    blob.upload_blob(data, overwrite=True)
+    with open(file_path, "rb") as f:
+        blob_client.upload_blob(f, overwrite=True)
 
-    print("AZURE UPLOAD SUCCESS")
+    size_mb = os.path.getsize(file_path) / (1024 * 1024)
+    blob_url = blob_client.url
 
-    return f"{AZURE_BLOB_CONTAINER}/{filename}"
+    return blob_name, blob_url, size_mb

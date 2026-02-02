@@ -1,85 +1,52 @@
-# services/extraction_service.py
-
-import io
-import pdfplumber
-from docx import Document
-from PIL import Image
-
-from azure.ai.formrecognizer import DocumentAnalysisClient
-from azure.core.credentials import AzureKeyCredential
-
-from config import (
-    AZURE_FORM_RECOGNIZER_ENDPOINT,
-    AZURE_FORM_RECOGNIZER_KEY
-)
+import os
+import uuid
+from sqlalchemy.orm import Session
+from database import SessionLocal
+from models import Document as DBDocument, DocumentChunk
+from services.blob_service import upload_to_blob
+from services.llm_service import classify_and_summarize
+from services.embedding_service import embed_text
 
 
-client = DocumentAnalysisClient(
-    endpoint=AZURE_FORM_RECOGNIZER_ENDPOINT,
-    credential=AzureKeyCredential(AZURE_FORM_RECOGNIZER_KEY)
-)
+def ingest_document(file_path, filename):
+    db: Session = SessionLocal()
 
+    # Upload to Azure Blob
+    blob_path, blob_url, size_mb = upload_to_blob(file_path, filename)
 
-def extract_text(file_bytes: bytes, filename: str) -> str:
-    ext = filename.lower().split(".")[-1]
+    # Extract + classify
+    classification = classify_and_summarize(file_path)
 
-    try:
-        # -------- PDF --------
-        if ext == "pdf":
-            text = extract_pdf_text(file_bytes)
-            if len(text.strip()) > 50:
-                return text
+    doc_type = classification.get("document_type", "Other")
+    summary = classification.get("summary", "")
+    detailed_summary = classification.get("detailed_summary", "")
 
-            # fallback to Azure OCR for scanned PDF
-            return extract_with_azure(file_bytes)
-
-        # -------- Word --------
-        if ext == "docx":
-            return extract_docx_text(file_bytes)
-
-        # -------- Images --------
-        if ext in ["png", "jpg", "jpeg", "webp", "tiff"]:
-            return extract_with_azure(file_bytes)
-
-        # -------- Everything else --------
-        return extract_with_azure(file_bytes)
-
-    except Exception as e:
-        print("Extraction error:", repr(e))
-        return ""
-
-
-# ---------------- PDF ----------------
-
-def extract_pdf_text(file_bytes: bytes) -> str:
-    text = ""
-    with pdfplumber.open(io.BytesIO(file_bytes)) as pdf:
-        for page in pdf.pages:
-            page_text = page.extract_text()
-            if page_text:
-                text += page_text + "\n"
-    return text
-
-
-# ---------------- DOCX ----------------
-
-def extract_docx_text(file_bytes: bytes) -> str:
-    doc = Document(io.BytesIO(file_bytes))
-    return "\n".join([p.text for p in doc.paragraphs])
-
-
-# ---------------- Azure OCR ----------------
-
-def extract_with_azure(file_bytes: bytes) -> str:
-    poller = client.begin_analyze_document(
-        "prebuilt-read",
-        document=file_bytes
+    # Save document
+    db_document = DBDocument(
+        filename=filename,
+        document_type=doc_type,
+        summary=summary,
+        detailed_summary=detailed_summary,
+        blob_path=blob_path,
+        blob_url=blob_url,
+        size_mb=size_mb,
     )
-    result = poller.result()
 
-    text = ""
-    for page in result.pages:
-        for line in page.lines:
-            text += line.content + "\n"
+    db.add(db_document)
+    db.commit()
+    db.refresh(db_document)
 
-    return text
+    # Chunk + embed
+    chunks = classification.get("chunks", [])
+
+    for chunk in chunks:
+        emb = embed_text(chunk)
+        db_chunk = DocumentChunk(
+            document_id=db_document.id,
+            content=chunk,
+            embedding=str(emb)
+        )
+        db.add(db_chunk)
+
+    db.commit()
+    return db_document.id
