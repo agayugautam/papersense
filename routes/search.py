@@ -1,108 +1,44 @@
+# backend/routes/search.py
+
 from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 from database import get_db
 from models import Document
-from services.ai_service import extract_search_intent
-import re
+from services.ai_service import generate_embedding
+from sqlalchemy import text
 
 router = APIRouter()
-
-STOP_WORDS = {
-    "show", "me", "give", "find", "list", "get",
-    "all", "please", "documents", "document", "of", "with",
-    "people", "person"
-}
-
-SYNONYM_MAP = {
-    "cv": "resume",
-    "biodata": "resume",
-    "profile": "resume",
-    "curriculum vitae": "resume",
-    "bill": "invoice",
-    "agreement": "contract",
-    "purchase order": "po",
-}
-
-AI_DOC_TYPE_MAP = {
-    "Resume": "resume",
-    "Invoice": "invoice",
-    "Receipt": "receipt",
-    "Contract": "contract",
-    "Report": "report",
-    "Purchase Order": "po",
-    "PO": "po",
-    "Indemnity Letter": "indemnity",
-    "Email": "email",
-    "Other": None,
-}
-
-def normalize_query(query: str):
-    q = query.lower()
-    for k, v in SYNONYM_MAP.items():
-        if k in q:
-            q = q.replace(k, v)
-    return q
-
 
 def serialize_document(doc: Document):
     return {
         "id": doc.id,
         "filename": doc.filename,
         "document_type": doc.document_type,
-        "parties": doc.parties,
         "summary": doc.summary,
-        "detailed_summary": doc.detailed_summary,
         "size_mb": doc.size_mb,
         "blob_path": doc.blob_path
     }
 
-
 @router.post("")
 def search(q: dict, db: Session = Depends(get_db)):
-    raw = q.get("query", "")
-    normalized = normalize_query(raw)
+    query_text = q.get("query", "").strip()
+    if not query_text:
+        return {"results": []}
 
-    try:
-        intent = extract_search_intent(normalized)
-    except:
-        intent = {
-            "document_type": None,
-            "min_experience_years": None,
-            "keywords": []
-        }
+    query_embedding = generate_embedding(query_text)
 
-    ai_doc_type = intent.get("document_type")
-    min_exp = intent.get("min_experience_years")
-    keywords = intent.get("keywords", [])
+    sql = text("""
+        SELECT *
+        FROM documents
+        WHERE embedding IS NOT NULL
+        ORDER BY embedding <-> :embedding
+        LIMIT 10;
+    """)
 
-    db_doc_type = None
-    if ai_doc_type:
-        db_doc_type = AI_DOC_TYPE_MAP.get(ai_doc_type, ai_doc_type.lower())
+    results = db.execute(
+        sql,
+        {"embedding": query_embedding}
+    ).fetchall()
 
-    query = db.query(Document)
-
-    # STRONG semantic filter
-    if db_doc_type:
-        query = query.filter(
-            Document.document_type.ilike(f"%{db_doc_type}%")
-        )
-
-        # If doc type exists, DO NOT apply keyword noise
-        results = query.all()
-        return {"results": [serialize_document(d) for d in results]}
-
-    # Only fallback to keyword search if no semantic type
-    if min_exp:
-        query = query.filter(
-            Document.detailed_summary.ilike(f"%{min_exp}%")
-        )
-
-    for token in keywords:
-        token = token.lower()
-        if token not in STOP_WORDS:
-            query = query.filter(
-                Document.detailed_summary.ilike(f"%{token}%")
-            )
-
-    results = query.all()
-    return {"results": [serialize_document(d) for d in results]}
+    docs = [serialize_document(Document(**row._mapping)) for row in results]
+    return {"results": docs}
