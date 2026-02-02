@@ -13,7 +13,6 @@ STOP_WORDS = {
     "people", "person"
 }
 
-# Query synonym normalization
 SYNONYM_MAP = {
     "cv": "resume",
     "biodata": "resume",
@@ -24,7 +23,6 @@ SYNONYM_MAP = {
     "purchase order": "po",
 }
 
-# AI -> DB document type mapping
 AI_DOC_TYPE_MAP = {
     "Resume": "resume",
     "Invoice": "invoice",
@@ -62,18 +60,11 @@ def serialize_document(doc: Document):
 @router.post("")
 def search(q: dict, db: Session = Depends(get_db)):
     raw = q.get("query", "")
-    
-    # Step 1 — normalize synonyms
     normalized = normalize_query(raw)
 
-    print("RAW:", raw)
-    print("NORMALIZED:", normalized)
-
-    # Step 2 — AI semantic intent
     try:
         intent = extract_search_intent(normalized)
-    except Exception as e:
-        print("AI intent failed:", e)
+    except:
         intent = {
             "document_type": None,
             "min_experience_years": None,
@@ -84,31 +75,28 @@ def search(q: dict, db: Session = Depends(get_db)):
     min_exp = intent.get("min_experience_years")
     keywords = intent.get("keywords", [])
 
-    print("AI TYPE:", ai_doc_type)
-    print("AI MIN EXP:", min_exp)
-    print("AI KEYWORDS:", keywords)
-
-    # Step 3 — map AI type to DB type
     db_doc_type = None
     if ai_doc_type:
         db_doc_type = AI_DOC_TYPE_MAP.get(ai_doc_type, ai_doc_type.lower())
 
     query = db.query(Document)
 
-    # Step 4 — filter by document type
+    # STRONG semantic filter
     if db_doc_type:
         query = query.filter(
             Document.document_type.ilike(f"%{db_doc_type}%")
         )
 
-    # Step 5 — experience filter (simple semantic)
+        # If doc type exists, DO NOT apply keyword noise
+        results = query.all()
+        return {"results": [serialize_document(d) for d in results]}
+
+    # Only fallback to keyword search if no semantic type
     if min_exp:
-        # crude but effective for v1
         query = query.filter(
             Document.detailed_summary.ilike(f"%{min_exp}%")
         )
 
-    # Step 6 — keyword filters
     for token in keywords:
         token = token.lower()
         if token not in STOP_WORDS:
@@ -117,6 +105,4 @@ def search(q: dict, db: Session = Depends(get_db)):
             )
 
     results = query.all()
-    serialized = [serialize_document(d) for d in results]
-
-    return {"results": serialized}
+    return {"results": [serialize_document(d) for d in results]}
