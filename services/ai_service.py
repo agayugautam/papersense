@@ -46,10 +46,12 @@ def extract_search_intent(query: str):
 You are an AI that extracts structured search intent.
 Return JSON only.
 
-Fields:
-- document_type (Resume, Invoice, Contract, Report, PO, Other)
-- min_experience_years (number or null)
-- keywords (array of important keywords)
+Schema:
+{
+  "document_type": one of ["Resume","Invoice","Contract","Report","PO","Other"],
+  "min_experience_years": number or null,
+  "keywords": array of important keywords
+}
 """
             },
             {
@@ -60,8 +62,11 @@ Fields:
         temperature=0
     )
 
-    content = response.choices[0].message.content
-    return json.loads(content)
+    raw = response.choices[0].message.content.strip()
+    print("RAW SEARCH AI RESPONSE:", raw)
+
+    json_text = extract_json(raw)
+    return json.loads(json_text)
 
 def analyze_text(text: str):
     response = client.chat.completions.create(
