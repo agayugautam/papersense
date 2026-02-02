@@ -11,13 +11,22 @@ class SearchRequest(BaseModel):
 
 @router.post("")
 async def run_ai_search(request: SearchRequest, db: Session = Depends(get_db)):
-    q = request.query.lower()
+    raw_q = request.query.strip().lower()
     
-    # Simple semantic-style search across filename, content, and type
+    # Handle simple pluralization (e.g., invoices -> invoice)
+    stemmed_q = raw_q[:-1] if raw_q.endswith('s') else raw_q
+    
+    from sqlalchemy import or_
+    
+    # Search for original query OR stemmed version in Content, Type, or Filename
     results = db.query(Document).filter(
-        (Document.filename.ilike(f"%{q}%")) | 
-        (Document.content.ilike(f"%{q}%")) |
-        (Document.document_type.ilike(f"%{q}%"))
+        or_(
+            Document.content.ilike(f"%{raw_q}%"),
+            Document.content.ilike(f"%{stemmed_q}%"),
+            Document.document_type.ilike(f"%{raw_q}%"),
+            Document.document_type.ilike(f"%{stemmed_q}%"),
+            Document.filename.ilike(f"%{raw_q}%")
+        )
     ).all()
     
-    return {"results": results}
+    return {"results": results, "count": len(results)}

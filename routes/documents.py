@@ -17,14 +17,13 @@ async def upload_document(file: UploadFile = File(...), db: Session = Depends(ge
         content = await file.read()
         size_mb = round(len(content) / (1024 * 1024), 2)
         
-        # Upload to Azure
+        # Azure Blob Upload
         await blob_service.upload_file(content, file.filename)
         
-        # Extract metadata
-        result = await extraction_service.ingest_document(content)
+        # Extract metadata - passing filename for extension check
+        result = await extraction_service.ingest_document(content, file.filename)
         analysis = result.get("analysis", {})
         
-        # Save to DB
         new_doc = Document(
             filename=file.filename,
             blob_path=file.filename,
@@ -41,7 +40,7 @@ async def upload_document(file: UploadFile = File(...), db: Session = Depends(ge
         
         db.add(new_doc)
         db.commit()
-        return {"status": "success"} # Returns 200 for frontend checkmark
+        return {"status": "success"}
         
     except Exception as e:
         db.rollback()
