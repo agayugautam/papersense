@@ -1,5 +1,3 @@
-# backend/routes/documents.py
-
 from fastapi import APIRouter, UploadFile, Depends
 from sqlalchemy.orm import Session
 from database import get_db
@@ -8,7 +6,7 @@ from services.ai_service import analyze_text, generate_embedding
 
 router = APIRouter()
 
-# ---------- GET ALL DOCUMENTS ----------
+# ---------- GET ALL DOCUMENTS (RESTORED) ----------
 
 @router.get("")
 def get_all_documents(db: Session = Depends(get_db)):
