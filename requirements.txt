@@ -14,3 +14,4 @@ python-dotenv
 pytesseract
 azure-ai-formrecognizer
 pdfplumber
+psycopg2-binary
