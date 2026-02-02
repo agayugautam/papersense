@@ -1,28 +1,24 @@
-# backend/config.py
-
 import os
 from dotenv import load_dotenv
 
 load_dotenv()
 
-# ---------------- DATABASE ----------------
-DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///./papersense.db")
+DATABASE_URL = os.getenv("DATABASE_URL")
 
-# ---------------- AZURE STORAGE ----------------
 AZURE_STORAGE_CONNECTION_STRING = os.getenv("AZURE_STORAGE_CONNECTION_STRING")
 AZURE_BLOB_CONTAINER = os.getenv("AZURE_BLOB_CONTAINER")
 
-# ---------------- AZURE OPENAI ----------------
+# Azure OpenAI
 AZURE_OPENAI_ENDPOINT = os.getenv("AZURE_OPENAI_ENDPOINT")
 AZURE_OPENAI_KEY = os.getenv("AZURE_OPENAI_KEY")
 AZURE_OPENAI_API_VERSION = os.getenv("AZURE_OPENAI_API_VERSION")
 
-# Chat / classification model
+# Chat model (gpt-4o)
 AZURE_OPENAI_DEPLOYMENT = os.getenv("AZURE_OPENAI_DEPLOYMENT")
 
-# Embedding model (THIS WAS MISSING)
+# Embedding model (papersense-embedding)
 AZURE_OPENAI_EMBEDDING_DEPLOYMENT = os.getenv("AZURE_OPENAI_EMBEDDING_DEPLOYMENT")
 
-# ---------------- FORM RECOGNIZER ----------------
+# Form recognizer
 AZURE_FORM_RECOGNIZER_ENDPOINT = os.getenv("AZURE_FORM_RECOGNIZER_ENDPOINT")
 AZURE_FORM_RECOGNIZER_KEY = os.getenv("AZURE_FORM_RECOGNIZER_KEY")
