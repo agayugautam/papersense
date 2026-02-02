@@ -3,11 +3,10 @@ import pdfplumber
 from docx import Document
 from azure.ai.formrecognizer import DocumentAnalysisClient
 from azure.core.credentials import AzureKeyCredential
-
 from config import settings
 from services.ai_service import ai_service
 
-# Initialize Azure Client using lowercase settings
+# Singleton client initialization
 client = DocumentAnalysisClient(
     endpoint=settings.azure_form_recognizer_endpoint,
     credential=AzureKeyCredential(settings.azure_form_recognizer_key)
@@ -19,59 +18,36 @@ class ExtractionService:
         raw_text = ""
 
         try:
-            # -------- PDF (Hybrid) --------
             if ext == "pdf":
-                raw_text = self.extract_pdf_text(file_bytes)
-                # If extraction is poor (less than 50 chars), fallback to Azure OCR
+                raw_text = self._extract_pdf(file_bytes)
                 if len(raw_text.strip()) < 50:
-                    raw_text = self.extract_with_azure(file_bytes)
-
-            # -------- Word --------
+                    raw_text = self._extract_azure(file_bytes)
             elif ext == "docx":
-                raw_text = self.extract_docx_text(file_bytes)
-
-            # -------- Plain Text / CSV --------
+                raw_text = self._extract_docx(file_bytes)
             elif ext in ["csv", "txt", "log"]:
                 raw_text = file_bytes.decode('utf-8', errors='ignore')
-
-            # -------- Images & Fallback --------
             else:
-                raw_text = self.extract_with_azure(file_bytes)
+                raw_text = self._extract_azure(file_bytes)
+        except Exception:
+            raw_text = self._extract_azure(file_bytes)
 
-        except Exception as e:
-            print(f"Extraction error for {filename}: {repr(e)}")
-            raw_text = ""
-
-        # Send to AI for classification and summary
         analysis = await ai_service.analyze_text(raw_text)
         return {"content": raw_text, "analysis": analysis}
 
-    def extract_pdf_text(self, file_bytes: bytes) -> str:
+    def _extract_pdf(self, b: bytes):
         text = ""
-        try:
-            with pdfplumber.open(io.BytesIO(file_bytes)) as pdf:
-                for page in pdf.pages:
-                    page_text = page.extract_text()
-                    if page_text:
-                        text += page_text + "\n"
-        except:
-            pass
+        with pdfplumber.open(io.BytesIO(b)) as pdf:
+            for page in pdf.pages:
+                page_text = page.extract_text()
+                if page_text: text += page_text + "\n"
         return text
 
-    def extract_docx_text(self, file_bytes: bytes) -> str:
-        try:
-            doc = Document(io.BytesIO(file_bytes))
-            return "\n".join([p.text for p in doc.paragraphs])
-        except:
-            return ""
+    def _extract_docx(self, b: bytes):
+        doc = Document(io.BytesIO(b))
+        return "\n".join([p.text for p in doc.paragraphs])
 
-    def extract_with_azure(self, file_bytes: bytes) -> str:
-        poller = client.begin_analyze_document("prebuilt-read", document=file_bytes)
-        result = poller.result()
-        text = ""
-        for page in result.pages:
-            for line in page.lines:
-                text += line.content + "\n"
-        return text
+    def _extract_azure(self, b: bytes):
+        poller = client.begin_analyze_document("prebuilt-read", document=b)
+        return "\n".join([l.content for p in poller.result().pages for l in p.lines])
 
 extraction_service = ExtractionService()

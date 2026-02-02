@@ -12,50 +12,46 @@ class AIService:
 
     async def analyze_text(self, text: str):
         prompt = f"""
-        Strictly classify this document into one of these: {settings.DOCUMENT_TYPES}.
-        Important: If it is an ID card, License, or Passport, use 'Identity Document'.
-        If it is a receipt or transfer, use 'Receipt'.
+        Task: Classify this document into one of these: {settings.DOCUMENT_TYPES}.
+        Return ONLY a JSON object with:
+        "document_type", "confidence" (number 0-1), "summary", "detailed_summary", "language", "parties"
         
         Text: {text[:4000]}
-        Return JSON with key "document_type" and "summary".
         """
         response = self.client.chat.completions.create(
             model=settings.azure_openai_deployment,
             messages=[
-                {"role": "system", "content": "You are a professional JSON classifier."},
+                {"role": "system", "content": "You are a JSON classifier. Always provide confidence as a float number like 0.95."},
                 {"role": "user", "content": prompt}
             ],
             response_format={"type": "json_object"}
         )
+        
         data = json.loads(response.choices[0].message.content)
         
-        # --- HARD MAPPING LOGIC ---
+        # --- TYPE GUARD: Fix the 'High' string to float error ---
+        conf = data.get("confidence", 0.0)
+        if isinstance(conf, str):
+            data["confidence"] = 0.95 if conf.lower() == "high" else 0.5
+        
+        # --- HIERARCHY OVERRIDE ---
         raw = text.lower()
-        summary = data.get("summary", "").lower()
         dtype = data.get("document_type", "Other")
-
-        # Force Identity mapping if AI misses but summary finds it
-        if any(k in raw or k in summary for k in ["identification", "id card", "valid card", "license"]):
-            dtype = "Identity Document"
-        elif any(k in raw or k in summary for k in ["purchase order", "lpo"]):
+        
+        if any(k in raw for k in ["resume", "cv", "curriculum vitae", "work experience"]):
+            dtype = "Resume"
+        elif any(k in raw for k in ["customs", "duty", "declaration", "tax receipt"]):
+            dtype = "Financial Statement"
+        elif any(k in raw for k in ["lpo", "purchase order"]):
             dtype = "Purchase Order"
-        elif "invoice" in raw or "invoice" in summary:
-            dtype = "Invoice"
-
+            
         data["document_type"] = dtype
         return data
 
     async def extract_search_intent(self, query: str):
-        # We strip the 's' from the end of words to handle pluralization (invoice vs invoices)
-        clean_query = query.lower().strip()
-        if clean_query.endswith('s'):
-            stemmed = clean_query[:-1]
-        else:
-            stemmed = clean_query
-
-        return {
-            "keywords": [clean_query, stemmed],
-            "doc_types": []
-        }
+        # Optimized for your plural/singular search needs
+        q = query.lower().strip()
+        stemmed = q[:-1] if q.endswith('s') else q
+        return {"keywords": [q, stemmed], "doc_types": []}
 
 ai_service = AIService()
