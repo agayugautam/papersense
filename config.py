@@ -1,63 +1,42 @@
-# config.py
-
 import os
-from dotenv import load_dotenv
+from pydantic_settings import BaseSettings
+from typing import List
 
-# Force load .env from project root
-load_dotenv(dotenv_path=".env", override=True)
+class Settings(BaseSettings):
+    PROJECT_NAME: str = "PaperSense"
+    DATABASE_URL: str = "sqlite:///./papersense.db"
+    
+    # Azure OpenAI
+    azure_openai_key: str
+    azure_openai_endpoint: str
+    azure_openai_api_version: str = "2024-12-01-preview"
+    azure_openai_deployment: str = "gpt-4o"
+    azure_openai_embedding_deployment: str = "text-embedding-3-small"
+    
+    # Azure Document Intelligence
+    azure_form_recognizer_endpoint: str
+    azure_form_recognizer_key: str
+    
+    # Azure Storage
+    azure_storage_connection_string: str
+    azure_blob_container: str
+    
+    # STRICT LIST: These must match your Frontend/Dashboard expectations
+    DOCUMENT_TYPES: List[str] = [
+        "Invoice",
+        "Contract",
+        "Resume",
+        "Purchase Order",
+        "Legal Document",
+        "Receipt",
+        "Financial Statement",
+        "Letter",
+        "Other"
+    ]
 
+    class Config:
+        env_file = ".env"
+        extra = "ignore"
+        case_sensitive = False
 
-def require_env(key: str):
-    value = os.getenv(key)
-    if not value:
-        raise RuntimeError(f"Missing required env variable: {key}")
-    return value
-
-
-# ===========================
-# Local Database (ignored now, SQLite used)
-# ===========================
-
-DATABASE_URL = os.getenv("DATABASE_URL")
-
-
-# ===========================
-# Azure Blob Storage
-# ===========================
-
-AZURE_STORAGE_CONNECTION_STRING = require_env("AZURE_STORAGE_CONNECTION_STRING")
-AZURE_BLOB_CONTAINER = require_env("AZURE_BLOB_CONTAINER")
-
-
-# ===========================
-# Azure OpenAI
-# ===========================
-
-AZURE_OPENAI_ENDPOINT = require_env("AZURE_OPENAI_ENDPOINT")
-AZURE_OPENAI_KEY = require_env("AZURE_OPENAI_KEY")
-AZURE_OPENAI_API_VERSION = require_env("AZURE_OPENAI_API_VERSION")
-
-# Chat model deployment
-AZURE_OPENAI_DEPLOYMENT = require_env("AZURE_OPENAI_DEPLOYMENT")
-
-# Embedding deployment (THIS WAS YOUR BUG)
-AZURE_OPENAI_EMBEDDING_DEPLOYMENT = require_env("AZURE_OPENAI_EMBEDDING_DEPLOYMENT")
-
-
-# ===========================
-# Azure OCR
-# ===========================
-
-AZURE_FORM_RECOGNIZER_ENDPOINT = require_env("AZURE_FORM_RECOGNIZER_ENDPOINT")
-AZURE_FORM_RECOGNIZER_KEY = require_env("AZURE_FORM_RECOGNIZER_KEY")
-
-
-# ===========================
-# Debug Print (one-time at startup)
-# ===========================
-
-print("=== PaperSense Config Loaded ===")
-print("AZURE_OPENAI_DEPLOYMENT =", AZURE_OPENAI_DEPLOYMENT)
-print("AZURE_OPENAI_EMBEDDING_DEPLOYMENT =", AZURE_OPENAI_EMBEDDING_DEPLOYMENT)
-print("AZURE_BLOB_CONTAINER =", AZURE_BLOB_CONTAINER)
-print("================================")
+settings = Settings()

@@ -1,52 +1,25 @@
-import os
-import uuid
-from sqlalchemy.orm import Session
-from database import SessionLocal
-from models import Document as DBDocument, DocumentChunk
-from services.blob_service import upload_to_blob
-from services.llm_service import classify_and_summarize
-from services.embedding_service import embed_text
+from azure.ai.formrecognizer import DocumentAnalysisClient
+from azure.core.credentials import AzureKeyCredential
+from config import settings
+from services.ai_service import ai_service
 
-
-def ingest_document(file_path, filename):
-    db: Session = SessionLocal()
-
-    # Upload to Azure Blob
-    blob_path, blob_url, size_mb = upload_to_blob(file_path, filename)
-
-    # Extract + classify
-    classification = classify_and_summarize(file_path)
-
-    doc_type = classification.get("document_type", "Other")
-    summary = classification.get("summary", "")
-    detailed_summary = classification.get("detailed_summary", "")
-
-    # Save document
-    db_document = DBDocument(
-        filename=filename,
-        document_type=doc_type,
-        summary=summary,
-        detailed_summary=detailed_summary,
-        blob_path=blob_path,
-        blob_url=blob_url,
-        size_mb=size_mb,
-    )
-
-    db.add(db_document)
-    db.commit()
-    db.refresh(db_document)
-
-    # Chunk + embed
-    chunks = classification.get("chunks", [])
-
-    for chunk in chunks:
-        emb = embed_text(chunk)
-        db_chunk = DocumentChunk(
-            document_id=db_document.id,
-            content=chunk,
-            embedding=str(emb)
+class ExtractionService:
+    def __init__(self):
+        self.client = DocumentAnalysisClient(
+            endpoint=settings.azure_form_recognizer_endpoint,
+            credential=AzureKeyCredential(settings.azure_form_recognizer_key)
         )
-        db.add(db_chunk)
 
-    db.commit()
-    return db_document.id
+    async def ingest_document(self, file_content: bytes):
+        poller = self.client.begin_analyze_document("prebuilt-read", file_content)
+        result = poller.result()
+        
+        raw_text = "\n".join([line.content for page in result.pages for line in page.lines])
+        
+        if not raw_text.strip():
+            return {"content": "", "analysis": {"doc_type": "Other", "summary": "Empty Document"}}
+
+        analysis = await ai_service.analyze_text(raw_text)
+        return {"content": raw_text, "analysis": analysis}
+
+extraction_service = ExtractionService()

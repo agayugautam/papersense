@@ -1,52 +1,49 @@
-# backend/routes/documents.py
-
-from fastapi import APIRouter, UploadFile, Depends
+from fastapi import APIRouter, UploadFile, File, Depends, HTTPException
 from sqlalchemy.orm import Session
 from database import get_db
 from models import Document
-from services.extraction_service import ingest_document
+from services.extraction_service import extraction_service
+from services.blob_service import blob_service
 
 router = APIRouter()
 
-
-# ===========================
-# GET ALL DOCUMENTS
-# ===========================
-
 @router.get("")
-def get_all_documents(db: Session = Depends(get_db)):
-    docs = db.query(Document).order_by(Document.created_at.desc()).all()
-
-    return [
-        {
-            "id": d.id,
-            "filename": d.filename,
-            "document_type": d.document_type,
-            "summary": d.summary,
-            "detailed_summary": d.detailed_summary,
-            "blob_url": d.blob_url,
-            "created_at": d.created_at,
-        }
-        for d in docs
-    ]
-
-
-# ===========================
-# UPLOAD DOCUMENT
-# ===========================
+def list_documents(db: Session = Depends(get_db)):
+    return db.query(Document).order_by(Document.created_at.desc()).all()
 
 @router.post("/upload")
-async def upload_document(file: UploadFile, db: Session = Depends(get_db)):
-    file_bytes = await file.read()
-
-    document_id = ingest_document(
-        file_bytes=file_bytes,
-        filename=file.filename,
-        db=db
-    )
-
-    return {
-        "id": document_id,
-        "filename": file.filename,
-        "status": "ingested"
-    }
+async def upload_document(file: UploadFile = File(...), db: Session = Depends(get_db)):
+    try:
+        content = await file.read()
+        size_mb = round(len(content) / (1024 * 1024), 2)
+        
+        # Upload to Azure
+        await blob_service.upload_file(content, file.filename)
+        
+        # Extract metadata
+        result = await extraction_service.ingest_document(content)
+        analysis = result.get("analysis", {})
+        
+        # Save to DB
+        new_doc = Document(
+            filename=file.filename,
+            blob_path=file.filename,
+            file_type=file.filename.split(".")[-1],
+            size_mb=size_mb,
+            content=result.get("content", ""),
+            document_type=analysis.get("document_type", "Other"),
+            summary=analysis.get("summary", ""),
+            detailed_summary=analysis.get("detailed_summary", ""),
+            confidence=analysis.get("confidence", 0.0),
+            language=analysis.get("language", "en"),
+            parties=analysis.get("parties", [])
+        )
+        
+        db.add(new_doc)
+        db.commit()
+        return {"status": "success"} # Returns 200 for frontend checkmark
+        
+    except Exception as e:
+        db.rollback()
+        print(f"UPLOAD CRASH: {e}")
+        raise HTTPException(status_code=500, detail=str(e))

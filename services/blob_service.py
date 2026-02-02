@@ -1,23 +1,21 @@
 from azure.storage.blob import BlobServiceClient
-import os
-from config import AZURE_BLOB_CONNECTION_STRING, AZURE_BLOB_CONTAINER
+from config import settings
 
-blob_service_client = BlobServiceClient.from_connection_string(
-    AZURE_BLOB_CONNECTION_STRING
-)
-container_client = blob_service_client.get_container_client(
-    AZURE_BLOB_CONTAINER
-)
+class BlobService:
+    def __init__(self):
+        self.client = BlobServiceClient.from_connection_string(
+            settings.azure_storage_connection_string
+        )
 
+    async def upload_file(self, content: bytes, filename: str) -> str:
+        # Get the blob client for the specific file
+        blob_client = self.client.get_blob_client(
+            container=settings.azure_blob_container, 
+            blob=filename
+        )
+        # Upload to Azure
+        blob_client.upload_blob(content, overwrite=True)
+        return blob_client.url
 
-def upload_to_blob(file_path, filename):
-    blob_name = f"{os.path.basename(file_path)}"
-    blob_client = container_client.get_blob_client(blob_name)
-
-    with open(file_path, "rb") as f:
-        blob_client.upload_blob(f, overwrite=True)
-
-    size_mb = os.path.getsize(file_path) / (1024 * 1024)
-    blob_url = blob_client.url
-
-    return blob_name, blob_url, size_mb
+# Create the singleton instance
+blob_service = BlobService()

@@ -1,154 +1,62 @@
-# services/ai_service.py
-
-from openai import AzureOpenAI
-from config import (
-    AZURE_OPENAI_ENDPOINT,
-    AZURE_OPENAI_KEY,
-    AZURE_OPENAI_API_VERSION,
-    AZURE_OPENAI_EMBEDDING_DEPLOYMENT,
-    AZURE_OPENAI_DEPLOYMENT
-)
 import json
-import re
+from openai import AzureOpenAI
+from config import settings
 
-client = AzureOpenAI(
-    api_key=AZURE_OPENAI_KEY,
-    api_version=AZURE_OPENAI_API_VERSION,
-    azure_endpoint=AZURE_OPENAI_ENDPOINT,
-)
+class AIService:
+    def __init__(self):
+        self.client = AzureOpenAI(
+            api_key=settings.azure_openai_key,
+            api_version=settings.azure_openai_api_version,
+            azure_endpoint=settings.azure_openai_endpoint
+        )
 
-SYSTEM_PROMPT = """
-You are an Enterprise Document Intelligence classifier.
+    async def analyze_text(self, text: str):
+        # We explicitly put "json" in the system and user message
+        prompt = f"""
+        Task: Classify this document into one of these: {settings.DOCUMENT_TYPES}.
+        Output Requirement: Return the result as a json object with these keys:
+        "document_type", "confidence", "summary", "detailed_summary", "language", "parties"
+        
+        Text: {text[:4000]}
+        """
+        
+        response = self.client.chat.completions.create(
+            model=settings.azure_openai_deployment,
+            messages=[
+                {"role": "system", "content": "You are a professional document classifier that outputs everything in json format."},
+                {"role": "user", "content": prompt}
+            ],
+            response_format={"type": "json_object"}
+        )
+        
+        data = json.loads(response.choices[0].message.content)
+        
+        # --- Mandatory Keyword Fallback to ensure correct folder mapping ---
+        raw = text.lower()
+        dtype = data.get("document_type", "Other")
+        
+        if any(k in raw for k in ["lpo", "purchase order", "order #"]):
+            dtype = "Purchase Order"
+        elif any(k in raw for k in ["cv", "resume", "curriculum vitae"]):
+            dtype = "Resume"
+        elif "invoice" in raw or "inv-" in raw:
+            dtype = "Invoice"
+            
+        data["document_type"] = dtype
+        return data
 
-Your job:
-- Read the document.
-- Understand its real-world business purpose.
-- Classify it into the most appropriate document_type from the list below.
+    async def extract_search_intent(self, query: str):
+        # Again, including "json" in the messages to satisfy the API
+        prompt = f"Extract search keywords from: '{query}'. Return as a json object: {{'keywords': ['{query}'], 'doc_types': []}}"
+        
+        response = self.client.chat.completions.create(
+            model=settings.azure_openai_deployment,
+            messages=[
+                {"role": "system", "content": "You are a search intent extractor. Always provide json output."},
+                {"role": "user", "content": prompt}
+            ],
+            response_format={"type": "json_object"}
+        )
+        return json.loads(response.choices[0].message.content)
 
-CRITICAL RULE:
-- You MUST choose the closest matching type.
-- Use "Other" ONLY if absolutely nothing fits.
-- Never default to "Other" for normal business documents.
-
-Document Types (Enterprise Ontology):
-
-[
-  "Invoice",
-  "Receipt",
-  "Purchase Order",
-  "Sales Order",
-  "Quotation",
-  "Proforma Invoice",
-  "Delivery Note",
-  "Bill of Lading",
-
-  "Contract",
-  "Service Agreement",
-  "Employment Contract",
-  "Non-Disclosure Agreement",
-  "Indemnity Letter",
-  "Legal Notice",
-  "Power of Attorney",
-  "Affidavit",
-  "Memorandum of Understanding",
-  "Settlement Agreement",
-
-  "Resume",
-  "Experience Letter",
-  "Offer Letter",
-  "Appointment Letter",
-  "Relieving Letter",
-  "Payslip",
-  "Salary Certificate",
-  "Employee Handbook",
-  "HR Policy",
-
-  "Bank Statement",
-  "Loan Agreement",
-  "Credit Report",
-  "Tax Return",
-  "GST Filing",
-  "Income Statement",
-  "Balance Sheet",
-  "Audit Report",
-
-  "Insurance Policy",
-  "Claim Form",
-  "Medical Report",
-  "Prescription",
-  "Fitness Certificate",
-
-  "Email",
-  "Business Letter",
-  "Cover Letter",
-  "Notice",
-  "Circular",
-
-  "Project Report",
-  "Research Paper",
-  "Whitepaper",
-  "Technical Documentation",
-  "User Manual",
-  "Product Specification",
-
-  "Certificate",
-  "License",
-  "Government ID",
-  "Passport",
-  "Visa",
-
-  "Other"
-]
-
-Return ONLY valid JSON.
-No markdown.
-No explanations.
-No extra text.
-
-Schema:
-{
-  "document_type": "<one of the above>",
-  "parties_involved": ["Party A", "Party B"],
-  "relevant_dates": ["YYYY-MM-DD"],
-  "summary": "short summary",
-  "detailed_summary": "long summary"
-}
-"""
-
-
-# ===========================
-# Utilities
-# ===========================
-
-def extract_json(text: str):
-    match = re.search(r"\{.*\}", text, re.DOTALL)
-    if not match:
-        raise ValueError("No JSON found in AI response")
-    return match.group(0)
-
-
-# ===========================
-# Public API
-# ===========================
-
-def analyze_document(text: str) -> dict:
-    response = client.chat.completions.create(
-        model=AZURE_OPENAI_DEPLOYMENT,
-        messages=[
-            {"role": "system", "content": SYSTEM_PROMPT},
-            {"role": "user", "content": text[:12000]},
-        ],
-        temperature=0.0,  # deterministic classification
-    )
-
-    raw = response.choices[0].message.content.strip()
-    json_text = extract_json(raw)
-    return json.loads(json_text)
-
-
-def embed_text(text: str) -> list:
-    response = client.embeddings.create(
-        model=AZURE_OPENAI_EMBEDDING_DEPLOYMENT,
-        input=text
-    )
-    return response.data[0].embedding
+ai_service = AIService()
