@@ -1,7 +1,7 @@
 # backend/models.py
 
 from sqlalchemy import Column, Integer, String, Float, DateTime, Text
-from sqlalchemy.dialects.postgresql import VECTOR
+from pgvector.sqlalchemy import Vector
 from database import Base
 from datetime import datetime
 
@@ -18,5 +18,5 @@ class Document(Base):
     blob_path = Column(String)
     created_at = Column(DateTime, default=datetime.utcnow)
 
-    # Vector embedding
-    embedding = Column(VECTOR(1536))
+    # Correct vector column
+    embedding = Column(Vector(1536))
