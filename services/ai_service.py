@@ -1,7 +1,11 @@
-# backend/services/ai_service.py
-
 from openai import AzureOpenAI
-from config import *
+from config import (
+    AZURE_OPENAI_ENDPOINT,
+    AZURE_OPENAI_KEY,
+    AZURE_OPENAI_API_VERSION,
+    AZURE_OPENAI_EMBEDDING_DEPLOYMENT,
+    AZURE_OPENAI_DEPLOYMENT
+)
 import json
 import re
 
@@ -32,7 +36,7 @@ Schema:
 def extract_json(text: str):
     match = re.search(r"\{.*\}", text, re.DOTALL)
     if not match:
-        raise ValueError("No JSON found")
+        raise ValueError("No JSON found in AI response")
     return match.group(0)
 
 def analyze_text(text: str):
@@ -49,11 +53,9 @@ def analyze_text(text: str):
     json_text = extract_json(raw)
     return json.loads(json_text)
 
-# -------- VECTOR EMBEDDING (FIXED) --------
-
 def generate_embedding(text: str):
     response = client.embeddings.create(
-        model=AZURE_OPENAI_EMBEDDING_DEPLOYMENT,  
+        model=AZURE_OPENAI_EMBEDDING_DEPLOYMENT,
         input=text
     )
     return response.data[0].embedding
