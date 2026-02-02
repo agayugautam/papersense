@@ -49,11 +49,11 @@ def analyze_text(text: str):
     json_text = extract_json(raw)
     return json.loads(json_text)
 
-# -------- VECTOR EMBEDDING --------
+# -------- VECTOR EMBEDDING (FIXED) --------
 
 def generate_embedding(text: str):
     response = client.embeddings.create(
-        model="text-embedding-3-small",
+        model=AZURE_OPENAI_EMBEDDING_DEPLOYMENT,  
         input=text
     )
     return response.data[0].embedding
