@@ -1,6 +1,7 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, Depends
 from fastapi.middleware.cors import CORSMiddleware
-from database import Base, engine
+from sqlalchemy.orm import Session
+from database import Base, engine, get_db
 from routes import documents, dashboard, search
 
 app = FastAPI()
@@ -10,7 +11,7 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=[
         "http://localhost:5173",
-        "https://papersense.vercel.app",  # your prod frontend
+        "https://papersense.vercel.app",
     ],
     allow_credentials=True,
     allow_methods=["*"],
@@ -23,12 +24,10 @@ app.include_router(documents.router, prefix="/api/documents")
 app.include_router(dashboard.router, prefix="/api/dashboard")
 app.include_router(search.router, prefix="/api/search")
 
-@app.get("/")
-def health():
-    return {"status": "PaperSense backend running"}
 
-@app.post("/api/debug/reset-documents")
+# (Optional utility endpoint you added)
+@app.post("/api/reset-documents")
 def reset_documents(db: Session = Depends(get_db)):
-    db.query(Document).delete()
+    db.query(documents.Document).delete()
     db.commit()
-    return {"status": "all documents deleted"}
+    return {"status": "ok"}
