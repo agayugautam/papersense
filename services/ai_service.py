@@ -1,3 +1,5 @@
+# backend/services/ai_service.py
+
 from openai import AzureOpenAI
 from config import *
 import json
@@ -28,45 +30,10 @@ Schema:
 """
 
 def extract_json(text: str):
-    """
-    Extract first JSON object from a string.
-    """
     match = re.search(r"\{.*\}", text, re.DOTALL)
     if not match:
-        raise ValueError("No JSON found in AI response")
+        raise ValueError("No JSON found")
     return match.group(0)
-
-def extract_search_intent(query: str):
-    response = client.chat.completions.create(
-        model=AZURE_OPENAI_DEPLOYMENT,
-        messages=[
-            {
-                "role": "system",
-                "content": """
-You are an AI that extracts structured search intent.
-Return JSON only.
-
-Schema:
-{
-  "document_type": one of ["Resume","Invoice","Contract","Report","PO","Other"],
-  "min_experience_years": number or null,
-  "keywords": array of important keywords
-}
-"""
-            },
-            {
-                "role": "user",
-                "content": query
-            }
-        ],
-        temperature=0
-    )
-
-    raw = response.choices[0].message.content.strip()
-    print("RAW SEARCH AI RESPONSE:", raw)
-
-    json_text = extract_json(raw)
-    return json.loads(json_text)
 
 def analyze_text(text: str):
     response = client.chat.completions.create(
@@ -79,7 +46,14 @@ def analyze_text(text: str):
     )
 
     raw = response.choices[0].message.content.strip()
-    print("RAW AI RESPONSE:", raw)
-
     json_text = extract_json(raw)
     return json.loads(json_text)
+
+# -------- VECTOR EMBEDDING --------
+
+def generate_embedding(text: str):
+    response = client.embeddings.create(
+        model="text-embedding-3-small",
+        input=text
+    )
+    return response.data[0].embedding
