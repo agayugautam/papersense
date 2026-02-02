@@ -1,21 +1,23 @@
-from fastapi import FastAPI, Body, Depends
+from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from database import Base, engine, get_db
+from database import Base, engine
 from routes import documents, dashboard, search
-from sqlalchemy.orm import Session
-from models import Document
 
-Base.metadata.create_all(bind=engine)
+app = FastAPI()
 
-app = FastAPI(title="PaperSense API")
-
+# CORS
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=False,
+    allow_origins=[
+        "http://localhost:5173",
+        "https://papersense.vercel.app",  # your prod frontend
+    ],
+    allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+Base.metadata.create_all(bind=engine)
 
 app.include_router(documents.router, prefix="/api/documents")
 app.include_router(dashboard.router, prefix="/api/dashboard")
