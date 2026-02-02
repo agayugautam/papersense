@@ -3,7 +3,7 @@ from sqlalchemy.orm import Session
 from database import get_db
 from models import Document
 import re
-from ai_service import extract_search_intent
+from services.ai_service import extract_search_intent
 
 router = APIRouter()
 
