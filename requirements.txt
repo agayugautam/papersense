@@ -16,3 +16,4 @@ azure-ai-formrecognizer
 pdfplumber
 psycopg2-binary
 pgvector
+pydantic-settings
